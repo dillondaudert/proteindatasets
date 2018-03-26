@@ -1,11 +1,10 @@
 import numpy as np
 import pandas as pd
 
-aminos_df = pd.read_csv("./aminos.csv", index_col=0)
-
-def prot_to_vector(seq: str) -> np.ndarray:
+def prot_to_vector(aminos_df: pd.DataFrame, seq: str) -> np.ndarray:
     """Concatenate the amino acid features for each position of the sequence.
     Args:
+        aminos_df: A pandas DataFrame with the appropriate amino acid features
         seq: A string representing an amino acid sequence.
 
     Returns:

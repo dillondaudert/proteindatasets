@@ -1,16 +1,35 @@
 import numpy as np
 import pandas as pd
 
-def prot_to_vector(aminos_df: pd.DataFrame, seq: str) -> np.ndarray:
+aa_feats = pd.read_csv("./cpdb2_aa_features.csv", index_col=0)
+ss_feats = pd.read_csv("./cpdb2_ss_features.csv", index_col=0)
+
+
+def prot_to_vector(seq: str, kind: str) -> np.ndarray:
     """Concatenate the amino acid features for each position of the sequence.
     Args:
-        aminos_df: A pandas DataFrame with the appropriate amino acid features
         seq: A string representing an amino acid sequence.
+        kind: One of "aa" or "ss" to indicate amino acid or structure features.
 
     Returns:
         A numpy array of features, shape (len(seq), features)"""
+
+    # convert to uppercase
+    seq = seq.upper()
+
+    if kind == "aa":
+        feats = aa_feats
+        # replace entries of "B" with "X" in amino acid sequences
+        seq = seq.replace("B", "X")
+    elif kind == "ss":
+        feats = ss_feats
+    else:
+        raise ValueError("Invalid argument for argument 'kind'")
+
     try:
-        chain = [aminos_df.loc[residue].values for residue in seq]
-    except KeyError:
-        raise FeaturesError('Invalid residue encountered in fixed_prot')
+        chain = [feats.loc[pos].values for pos in seq]
+    except KeyError as e:
+        print(e)
+        raise ValueError("Invalid string character encountered in prot_to_vector")
+
     return np.concatenate(chain, axis=0).reshape(len(seq), -1)

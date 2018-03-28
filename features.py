@@ -21,6 +21,8 @@ def prot_to_vector(seq: str, kind: str) -> np.ndarray:
         feats = aa_feats
         # replace entries of "B" with "X" in amino acid sequences
         seq = seq.replace("B", "X")
+        # replace entries of "J" with "X" in amino acid sequences
+        seq = seq.replace("J", "X")
     elif kind == "ss":
         feats = ss_feats
     else:

@@ -27,6 +27,7 @@ def prot_to_vector(seq: str, kind: str) -> np.ndarray:
         seq = seq.replace("O", "X")
         # replace entries of "U" with "X"
         seq = seq.replace("U", "X")
+        seq = seq.replace("Z", "X")
     elif kind == "ss":
         feats = ss_feats
     else:

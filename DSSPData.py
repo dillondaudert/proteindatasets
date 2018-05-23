@@ -39,8 +39,8 @@ class DSSPData:
 
       if( start ):
         self.num.append(    line[0:5].strip() )
-        self.resnum.append( line[5:10].strip() )
-        self.moltyp.append( line[10:12].strip() )
+        self.resnum.append( line[5:11].strip() )
+        self.moltyp.append( line[11:12].strip() )
         self.aa.append(     line[12:14].strip() )
         self.struct.append( line[14:25] )
         self.bp1.append(    line[25:29].strip() )

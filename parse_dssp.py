@@ -62,6 +62,8 @@ def _parse(filename):
         # find the start and end locations
         if aa == "*":
             chain_seps.append(i)
+        elif aa.islower():
+            seq[i] = "C"
             
     chain_names = set(chain_type)
     if "" in chain_names:
@@ -135,6 +137,7 @@ def parser(worker_queue, done_queue, id):
         filename = worker_queue.get()
         # check if done
         if filename is None:
+            done_queue.put((None, None))
             return
 
         local_count += 1
@@ -143,18 +146,19 @@ def parser(worker_queue, done_queue, id):
 
         try:
             records = _parse(filename)
-            done_queue.put(records)
+            done_queue.put((records, len(records)))
         except:
             print("Worker %d encountered exception, skipping record...")
 
 
 if __name__ == '__main__':
 
-    num_workers = 4
+    num_workers = 3
     files = os.listdir(datapath)
-    num_records = len(files)
+    num_files = len(files)
+    num_records = 0
 
-    print("Processing %d individual records." % (num_records))
+    print("Processing %d files." % (num_files))
 
     worker_queue = Queue()
     done_queue = Queue()
@@ -176,15 +180,21 @@ if __name__ == '__main__':
         worker_queue.put(None)
 
     print("Parsing DSSP files...")
+    workers_done = 0
     results = []
-    for i in range(num_records):
+    while True:
+        if workers_done == num_workers:
+            break
         records = done_queue.get()
-        for rec in records:
+        if records[0] is None:
+            workers_done += 1
+            print("%d workers done" % workers_done)
+            continue
+        num_records += records[1]
+        for rec in records[0]:
             results.append(rec)
 
-    assert len(results) != 0
-
-    print("Saving %d records to dssp_records.csv" % len(results))
+    print("Saving %d records to dssp_records.csv" % num_records)
     filename = "dssp_records.csv"
     df = pd.DataFrame.from_records(results, columns=["dssp_id", "seq", "ss", "acc", "tco", "kappa", "alpha", "phi", "psi"])
     df.to_csv(filename, index=False)

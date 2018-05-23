@@ -5,41 +5,124 @@ from multiprocessing import Process, Queue
 from DSSPData import DSSPData
 
 datapath = "/home/dillon/data/dssp/raw/"
-STATUS_FLAG = -100
 
 def _parse(filename):
-    '''Parse a single .dssp file and return its properties.
-    Returns:
-        dssp_id                 - str
+    '''Parse a single .dssp file.
+    
+    This function splits a dssp record into its constituent
+    chains and returns a record for each chain.
+    
+    Returns a list of records, each with:
+        dssp_chain_id           - str
         seq                     - str
-        secondary structures    - str
-        tco                     - list
-        kappa                   - list
-        alpha                   - list
-        phi                     - list
-        psi                     - list
+        ss                      - str
+        acc                     - csv string
+        tco                     - csv string
+        kappa                   - csv string
+        alpha                   - csv string
+        phi                     - csv string
+        psi                     - csv string
     '''
 
     dssp = DSSPData()
     dssp.parseDSSP(filename)
-
     dssp_id = os.path.splitext(os.path.basename(filename))[0]
-    seq = ''.join(dssp.aa)
+    
+    # get lists of features for entire entry
+    seq = dssp.aa
     structs = []
     for i in range(len(dssp.aa)):
         s = dssp.struct[i][2]
         if s == ' ':
+            if dssp.struct[i][0] == "*":
+                assert seq[i] == "!"
+                seq[i] = "*"
             s = 'U'
         structs.append(s)
+    ss = structs
+    acc = dssp.acc
+    tco = dssp.tco
+    kappa = dssp.kappa
+    alpha = dssp.alpha
+    phi = dssp.phi
+    psi = dssp.psi
+    
+    # check lengths
+    try:
+        assert len(seq) == len(structs) == len(acc) == len(tco) 
+        assert len(seq) == len(kappa) == len(alpha) == len(phi)
+        assert len(seq) == len(psi)
+    except AssertionError as e:
+        print("In dssp record %s, field lengths did not match.\n" % dssp_id)
+        raise
+        
+    chain_type = list(dssp.getChainType())
+    chain_seps = []
+    for i, aa in enumerate(seq):
+        # find the start and end locations
+        if aa == "*":
+            chain_seps.append(i)
+            
+    chain_names = set(chain_type)
+    if "" in chain_names:
+        chain_names.remove("")
+        
+    try:
+        assert "".join(list(chain_names)).isalnum()
+        assert len(chain_names) == len(chain_seps)+1
+    except AssertionError:
+        print(dssp_id, "chain_names: ", chain_names, "chain_seps: ", chain_seps)
+        raise
+    
+    chain_records = []
+    unique_chain_ids = set()
+    
+    prev_chain_end = -1    
+    for i, chain_end in enumerate(chain_seps):
+        chain_id = chain_type[prev_chain_end+1]
+        chain_dssp_id = dssp_id + chain_id
+        unique_chain_ids.add(chain_dssp_id)
+        chain_seq = "".join(seq[prev_chain_end+1:chain_end])
+        chain_ss = "".join(ss[prev_chain_end+1:chain_end])
+        chain_acc = ",".join(acc[prev_chain_end+1:chain_end])
+        chain_tco = ",".join(tco[prev_chain_end+1:chain_end])
+        chain_kappa = ",".join(kappa[prev_chain_end+1:chain_end])
+        chain_alpha = ",".join(alpha[prev_chain_end+1:chain_end])
+        chain_phi = ",".join(phi[prev_chain_end+1:chain_end])
+        chain_psi = ",".join(psi[prev_chain_end+1:chain_end])
+        chain_records.append((chain_dssp_id, chain_seq, chain_ss, 
+                              chain_acc, chain_tco, chain_kappa, 
+                              chain_alpha, chain_phi, chain_psi))
+        prev_chain_end = chain_end
+        
+    # then the last chain
+    chain_dssp_id = dssp_id + chain_type[prev_chain_end+1]
+    unique_chain_ids.add(chain_dssp_id)
+    chain_seq = "".join(seq[prev_chain_end+1:])
+    chain_ss = "".join(ss[prev_chain_end+1:])
+    chain_acc = ",".join(acc[prev_chain_end+1:])
+    chain_tco = ",".join(tco[prev_chain_end+1:])
+    chain_kappa = ",".join(kappa[prev_chain_end+1:])
+    chain_alpha = ",".join(alpha[prev_chain_end+1:])
+    chain_phi = ",".join(phi[prev_chain_end+1:])
+    chain_psi = ",".join(psi[prev_chain_end+1:])
+    chain_records.append((chain_dssp_id, chain_seq, chain_ss, 
+                          chain_acc, chain_tco, chain_kappa, 
+                          chain_alpha, chain_phi, chain_psi))
+    
+    try:
+        assert len(chain_names) == len(unique_chain_ids)
+    except AssertionError:
+        print("chain names: ", chain_names, "\nunique ids: ", unique_chain_ids)
+        raise
+        
+    
+    return chain_records
+        
+        
+        
+        
 
-    ss = ''.join(structs)
-    tco = ','.join(dssp.getTCO())
-    kappa = ','.join(dssp.getKAPPA())
-    alpha = ','.join(dssp.getALPHA())
-    phi = ','.join(dssp.getPHI())
-    psi = ','.join(dssp.getPSI())
-
-    return (dssp_id, seq, ss, tco, kappa, alpha, phi, psi)
 
 def parser(worker_queue, done_queue, id):
     '''Parser task that parses DSSP files from the worker_queue and places
@@ -58,8 +141,11 @@ def parser(worker_queue, done_queue, id):
         if local_count % 1000 == 0:
             print("Process #%d has handled %d records." % (id, local_count))
 
-        res = _parse(filename)
-        done_queue.put(res)
+        try:
+            records = _parse(filename)
+            done_queue.put(records)
+        except:
+            print("Worker %d encountered exception, skipping record...")
 
 
 if __name__ == '__main__':
@@ -67,10 +153,8 @@ if __name__ == '__main__':
     num_workers = 4
     files = os.listdir(datapath)
     num_records = len(files)
-    num_files = 10
-    tenth = num_records // num_files
 
-    print("Processing %d individual records into %d files." % (num_records, num_files))
+    print("Processing %d individual records." % (num_records))
 
     worker_queue = Queue()
     done_queue = Queue()
@@ -93,25 +177,16 @@ if __name__ == '__main__':
 
     print("Parsing DSSP files...")
     results = []
-    file_index = 1
     for i in range(num_records):
-        res = done_queue.get()
-        results.append(res)
+        records = done_queue.get()
+        for rec in records:
+            results.append(rec)
 
-        assert len(results) != 0
+    assert len(results) != 0
 
-        # split the data into 10 different files
-        if len(results) % tenth == 0:
-            print("%2d%% done, saving to dssp_%d.csv" % (file_index*10, file_index))
-            filename = "dssp_"+str(file_index)+".csv"
-            df = pd.DataFrame.from_records(results, columns=["dssp_id", "seq", "ss", "tco", "kappa", "alpha", "phi", "psi"])
-            df.to_csv(filename, index=False)
-            file_index += 1
-            results = []
-
-    print("Finished. Saving remaining %d to dssp_%d.dssp" % (len(results), file_index))
-    filename = "dssp_"+str(file_index)+".csv"
-    df = pd.DataFrame.from_records(results, columns=["dssp_id", "seq", "ss", "tco", "kappa", "alpha", "phi", "psi"])
+    print("Saving %d records to dssp_records.csv" % len(results))
+    filename = "dssp_records.csv"
+    df = pd.DataFrame.from_records(results, columns=["dssp_id", "seq", "ss", "acc", "tco", "kappa", "alpha", "phi", "psi"])
     df.to_csv(filename, index=False)
 
     print("Joining %d workers..." % (num_workers))

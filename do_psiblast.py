@@ -81,4 +81,4 @@ if __name__ == "__main__":
         # execute psiblast
         do_psiblast(dirpath, rec)
         if i % 1000 == 0:
-            print("Handled %d records." % i+1)
+            print("Handled %d records." % (i+1))

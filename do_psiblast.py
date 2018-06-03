@@ -28,9 +28,13 @@ def do_psiblast(dirpath, rec):
     # out_pssm=str(query_basepath)+"_blast.pssm"
     # out_ascii_pssm=str(query_basepath)+"_blast.ascii_pssm"
     # save_pssm_after_last_round=True
-    psib_cline = NcbipsiblastCommandline(query=query, db=db, evalue=evalue, outfmt=outfmt, out=out, num_threads=num_threads, num_iterations=num_iterations)
+    try:
+        psib_cline = NcbipsiblastCommandline(query=query, db=db, evalue=evalue, outfmt=outfmt, out=out, num_threads=num_threads, num_iterations=num_iterations)
     #print(psib_cline)
-    stdout, stderr = psib_cline()
+        stdout, stderr = psib_cline()
+    except:
+        print("Failed to run PSIBLAST on record %s" % rec.id)
+        return "", ""
 
     return stdout, stderr
 
@@ -71,10 +75,10 @@ if __name__ == "__main__":
     records = SeqIO.parse("/home/dillonbbailly/main/uniref50/uniref50_filt.fasta", "fasta")
 
     for i, rec in enumerate(records):
-        if i % 1000 == 999:
-            print("Handled %d records." % i)
         # check if dir / files already exist
         # create directory for this record
         dirpath = create_directory(rec)
         # execute psiblast
         do_psiblast(dirpath, rec)
+        if i % 1000 == 0:
+            print("Handled %d records." % i+1)

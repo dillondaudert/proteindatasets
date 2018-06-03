@@ -29,7 +29,7 @@ def do_psiblast(dirpath, rec):
     # out_ascii_pssm=str(query_basepath)+"_blast.ascii_pssm"
     # save_pssm_after_last_round=True
     psib_cline = NcbipsiblastCommandline(query=query, db=db, evalue=evalue, outfmt=outfmt, out=out, num_threads=num_threads, num_iterations=num_iterations)
-    print(psib_cline)
+    #print(psib_cline)
     stdout, stderr = psib_cline()
 
     return stdout, stderr
@@ -48,7 +48,7 @@ def create_directory(rec):
         dirpath = Path(Path.cwd(), dirname)
 
     # create directory
-    print("creating dir %s" % str(dirpath))
+    #print("creating dir %s" % str(dirpath))
     os.makedirs(str(dirpath))
 
     return dirpath
@@ -70,11 +70,11 @@ if __name__ == "__main__":
 
     records = SeqIO.parse("/home/dillonbbailly/main/uniref50/uniref50_filt.fasta", "fasta")
 
-    for rec in records:
+    for i, rec in enumerate(records):
+        if i % 1000 == 999:
+            print("Handled %d records." % i)
         # check if dir / files already exist
         # create directory for this record
         dirpath = create_directory(rec)
         # execute psiblast
         do_psiblast(dirpath, rec)
-
-        quit()

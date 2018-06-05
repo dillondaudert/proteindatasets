@@ -1,29 +1,117 @@
-# This script takes a fasta file as input and runs PSIBLAST
-# on each one individually. The results are saved in their
-# own files, with the names equal to their fasta IDs
 
 import os
 from pathlib import Path
 from Bio import SeqIO
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
 from Bio.Blast import NCBIXML
+from multiprocessing import Process, Queue
 
-def create_directory(rec):
-    dirname = rec.id+"_pb"
-    dirpath = Path(Path.cwd(), dirname)
+num_readers = 6
 
-    # check that directory doesn't exist
-    count = 0
-    while dirpath.exists():
-        count += 1
-        print("dir %s exists, incrementing name" % (dirname))
-        dirname = rec.id+"_pb_"+str(count)
-        dirpath = Path(Path.cwd(), dirname)
+def del_dirs(cleanup_queue: Queue):
+    """
+    Check the directories passed to the queue. If it is a subdirectory
+    of raw/, then delete it recursively.
+    Only send directories that are safe to delete here.
+    """
 
-    # create directory
-    #print("creating dir %s" % str(dirpath))
-    os.makedirs(str(dirpath))
+    while True:
+        directory = cleanup_queue.get()
+        # check if done; this only happens is combine_records is done
+        if directory is None:
+            break
 
-    return dirpath
+        # delete
+        print("Would delete %s" % str(directory))
+
+def combine_records(save_queue: Queue, cleanup_queue: Queue):
+    """
+    Process psiblast results, aggregate, and save to a fasta file.
+    Once written, send directories to cleanup.
+    """
+
+    readers_done = 0
+    file_counter = 1
+    seqrecs = []
+    dirs = []
+    while readers_done < num_readers:
+        directory = save_queue.get()
+        # check if done
+        if directory is None:
+            readers_done += 1
+            print("Reader %d done!" % readers_done)
+            continue
+
+        dirs.append(directory)
+
+        # read the sequence from the fasta file in this directory
+        # create a SeqRecord TODO
+        seqrec = None
+
+        seqrecs.append(seqrec)
+
+        if len(seqrecs) == 100000:
+            # write out to file
+            try:
+                #SeqIO.write(seqrecs, "cull_uniref50_%d.fasta"%(file_counter), "fasta")
+                print("Would write %d seqs to file" % len(seqrecs))
+                file_counter += 1
+                seqrecs.clear()
+            except Exception as e:
+                print("Exception: %s" % str(e))
+                print("Can't write file, but directories not deleted.")
+                quit()
+
+            while len(dirs) > 0:
+                cleanup_queue.put(dirs.pop())
+
+            assert len(seqrecs) == 0
+            assert len(dirs) == 0
+
+    try:
+        #SeqIO.write(seqrecs, "cull_uniref50_%d.fasta"%(file_counter), "fasta")
+        print("Would write %d seqs to file" % len(seqrecs))
+        file_counter += 1
+        seqrecs.clear()
+    except Exception as e:
+        print("Exception: %s" % str(e))
+        print("Can't write file, but directories not deleted.")
+        quit()
+
+    while len(dirs) > 0:
+        cleanup_queue.put(dirs.pop())
+
+    cleanup_queue.put(None)
+
+def reader(dir_queue: Queue, cleanup_queue: Queue, save_queue: Queue):
+    """
+    Calculate sequence identities from blast results in directories
+    passed to a queue. Forward the low % ones to be saved, and the
+    rest forward to be cleaned up.
+    """
+
+    while True:
+        d = dir_queue.get()
+
+        if d is None:
+            # signal to writer this reader is done
+            save_queue.put(None)
+            break
+
+        # find xml
+        for f in d.iterdir():
+            if f.suffix == ".xml":
+                try:
+                    recs = list(NCBIXML.parse(open(f)))
+                except Exception as e:
+                    print("Exception %s encountered for file %s" % (str(e), str(f)))
+
+
+                    # TODO
+                    # calc identity
+                    # decide where it goes
+
 
 def calc_identities(record):
     # calculate the % identity of a record with all of its

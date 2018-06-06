@@ -9,6 +9,7 @@ from multiprocessing import Process, Queue
 
 num_readers = 6
 
+# TODO
 def del_dirs(cleanup_queue: Queue):
     """
     Check the directories passed to the queue. If it is a subdirectory
@@ -46,8 +47,12 @@ def combine_records(save_queue: Queue, cleanup_queue: Queue):
         dirs.append(directory)
 
         # read the sequence from the fasta file in this directory
-        # create a SeqRecord TODO
-        seqrec = None
+        for f in directory.iterdir():
+            if f.suffix == ".fasta":
+                parsed_recs = SeqIO.parse(f, "fasta")
+                if len(parsed_recs) != 1:
+                    print("File %s has more than 1 record?" % str(f))
+                seqrec = parsed_recs[0]
 
         seqrecs.append(seqrec)
 
@@ -116,34 +121,37 @@ def reader(dir_queue: Queue, cleanup_queue: Queue, save_queue: Queue):
 def calc_identities(record):
     # calculate the % identity of a record with all of its
     # alignments; hsps
-    identities = []
+    identities = [0.]
     for align in record.alignments:
         ident = sum((hsp.identities for hsp in align.hsps))
         identities.append(ident/record.query_length)
     return identities
 
 def count_identities(raw_dir):
-    perc30 = 0
+    perc25 = 0
     perc50 = 0
     perc80 = 0
     sum_perc = 0
     num_align = 0
     for i, rec in enumerate(read_records(raw_dir)):
-        if i % 10000 == 0:
-            print("%-9d: 30%%: %-5d, 50%%: %-5d, 80%%: %-5d" % (i, perc30, perc50, perc80))
+        if i % 5000 == 0:
+            print("%-9d: 25%%: %-5d, 50%%: %-5d, 80%%: %-5d" % (i, perc25, perc50, perc80))
             if num_align > 0:
                 print("\tAverage %% identity: %.4f" % (sum_perc/num_align))
         identities = calc_identities(rec)
         if len(identities) > 0:
             sum_perc += sum(identities)
             num_align += len(rec.alignments)
-            if max(identities) > .3:
-                perc30 += 1
+            if max(identities) > .25:
+                perc25 += 1
             if max(identities) > .5:
                 perc50 += 1
             if max(identities) > .8:
                 perc80 += 1
-    return perc30, perc50, perc80, sum_perc, num_align
+    print("%-9d: 25%%: %-5d, 50%%: %-5d, 80%%: %-5d" % (i, perc25, perc50, perc80))
+    if num_align > 0:
+        print("\tAverage %% identity: %.4f" % (sum_perc/num_align))
+    return perc25, perc50, perc80, sum_perc, num_align
 
 
 
@@ -161,9 +169,51 @@ def read_records(raw_dir: Path):
                 for rec in recs:
                     yield rec
 
+def simple_aggregate(raw_dir: Path):
+    """
+    A simple, sequential version of the aggregate functionality.
+    This combines uniref sequences with < 30% sequence identity into
+    a single fasta file of 100k sequences.
+    """
+
+    seqrecs = []
+    count = 0
+    total = 0
+    dir_iterator = raw_dir.iterdir()
+
+    while count < 100000:
+        d = next(dir_iterator)
+        total += 1
+        fastas = sorted(d.glob("*.fasta"))
+        xmls = sorted(d.glob("*.xml"))
+        if len(fastas) != 1 or len(xmls) != 1:
+            print("More than 1 fasta or xml file in dir %s" % str(d))
+
+        try:
+            b_recs = list(NCBIXML.parse(open(xmls[0])))
+        except Exception as e:
+            print("Exception encountered for file %s: %s" % (str(xmls[0]), str(e)))
+            continue
+
+        # for each rec, check if any seq id > 30%
+
+        identity = max((max(calc_identities(b_rec)) for b_rec in b_recs))
+        if identity < .3:
+            parsed_recs = [rec for rec in SeqIO.parse(fastas[0], "fasta")]
+            if len(parsed_recs) != 1:
+                print("File %s has more than 1 record?" % str(f))
+            seqrec = parsed_recs[0]
+            seqrecs.append(seqrec)
+            count += 1
+            if count % 5000 == 0:
+                print("%d sequences added out of %d read" % (count, total))
+
+    SeqIO.write(seqrecs, "cullUR50_100K.fasta", "fasta")
 
 
 if __name__ == "__main__":
 
     raw_dir = Path(Path.home(), "main", "cull_uniref50", "raw")
-    perc30, perc50, perc80, sum_perc, num_align = count_identities(raw_dir)
+    #perc25, perc50, perc80, sum_perc, num_align = count_identities(raw_dir)
+    simple_aggregate(raw_dir)
+

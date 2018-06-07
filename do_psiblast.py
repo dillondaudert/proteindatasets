@@ -3,6 +3,7 @@
 # own files, with the names equal to their fasta IDs
 
 import os
+from multiprocessing import Process, Queue
 from pathlib import Path
 from Bio import SeqIO
 from Bio.Blast import NCBIXML
@@ -23,7 +24,7 @@ def do_psiblast(dirpath, rec):
     evalue=0.001
     outfmt=5
     out=str(query_basepath)+"_blast.xml"
-    num_threads=8
+    num_threads=6
     num_iterations=3
     # out_pssm=str(query_basepath)+"_blast.pssm"
     # out_ascii_pssm=str(query_basepath)+"_blast.ascii_pssm"
@@ -34,9 +35,9 @@ def do_psiblast(dirpath, rec):
         stdout, stderr = psib_cline()
     except:
         print("Failed to run PSIBLAST on record %s" % rec.id)
-        return "", ""
+        return -1
 
-    return stdout, stderr
+    return 1
 
 
 def create_directory(rec):
@@ -45,11 +46,12 @@ def create_directory(rec):
 
     # check that directory doesn't exist
     count = 0
-    while dirpath.exists():
-        count += 1
-        print("dir %s exists, incrementing name" % (dirname))
-        dirname = rec.id+"_pb_"+str(count)
-        dirpath = Path(Path.cwd(), dirname)
+    if dirpath.exists():
+        return None
+#        count += 1
+#        print("dir %s exists, incrementing name" % (dirname))
+#        dirname = rec.id+"_pb_"+str(count)
+#        dirpath = Path(Path.cwd(), dirname)
 
     # create directory
     #print("creating dir %s" % str(dirpath))
@@ -57,15 +59,68 @@ def create_directory(rec):
 
     return dirpath
 
-if __name__ == "__main__":
+def worker(rec_queue, done_queue):
+    #
+    count = 0
+    skipped = 0
+    while True:
+        rec = rec_queue.get()
+        if rec is None:
+            done_queue.put((count, skipped))
+            return
 
-    records = SeqIO.parse("/home/dillonbbailly/main/uniref50/uniref50_filt.fasta", "fasta")
+        count += 1
 
-    for i, rec in enumerate(records):
         # check if dir / files already exist
         # create directory for this record
         dirpath = create_directory(rec)
+        if dirpath is None:
+            skipped += 1
+            continue
         # execute psiblast
-        do_psiblast(dirpath, rec)
-        if i % 1000 == 0:
-            print("Handled %d records." % (i+1))
+        if do_psiblast(dirpath, rec) == -1:
+            skipped += 1
+
+
+
+if __name__ == "__main__":
+
+    num_workers = 3
+
+    records = SeqIO.parse("/home/dillonbbailly/main/uniref50/uniref50_filt.fasta", "fasta")
+
+    rec_queue = Queue(1000)
+    done_queue = Queue()
+
+    workers = []
+    for i in range(num_workers):
+        p = Process(target=worker, args=(rec_queue, done_queue))
+        workers.append(p)
+        p.start()
+
+    for i, rec in enumerate(records):
+        if len(rec.seq) < 25 or len(rec.seq) > 2000:
+            continue
+        rec_queue.put(rec)
+        if i % 5000 == 0:
+            print("Handled %d records" % (i))
+
+    for i in range(num_workers):
+        rec_queue.put(None)
+
+    total = 0
+    skipped = 0
+    for i in range(num_workers):
+        (count, skip) = done_queue.get()
+        total += count
+        skipped += skip
+
+    print("DONE: %d sequences processed, of which %d were skipped." % (total, skipped))
+
+    for p in workers:
+        p.join()
+
+
+
+
+

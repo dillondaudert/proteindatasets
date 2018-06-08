@@ -1,5 +1,6 @@
 
 import os
+import numpy as np
 from pathlib import Path
 from Bio import SeqIO
 from Bio.Seq import Seq
@@ -172,17 +173,19 @@ def read_records(raw_dir: Path):
 def simple_aggregate(raw_dir: Path):
     """
     A simple, sequential version of the aggregate functionality.
-    This combines uniref sequences with < 30% sequence identity into
-    a single fasta file of 100k sequences.
+    This combines uniref sequences with < 20% sequence identity into
+    a single fasta file of 200k sequences.
     """
 
     seqrecs = []
     count = 0
     total = 0
-    dir_iterator = raw_dir.iterdir()
+    dirs = list(raw_dir.iterdir())
+    np.random.shuffle(dirs)
 
-    while count < 100000:
-        d = next(dir_iterator)
+    for d in dirs:
+        if count >= 200000:
+            break
         total += 1
         fastas = sorted(d.glob("*.fasta"))
         xmls = sorted(d.glob("*.xml"))
@@ -192,13 +195,13 @@ def simple_aggregate(raw_dir: Path):
         try:
             b_recs = list(NCBIXML.parse(open(xmls[0])))
         except Exception as e:
-            print("Exception encountered for file %s: %s" % (str(xmls[0]), str(e)))
+            print("Exception encountered for dir %s: %s" % (str(d), str(e)))
             continue
 
         # for each rec, check if any seq id > 30%
 
         identity = max((max(calc_identities(b_rec)) for b_rec in b_recs))
-        if identity < .3:
+        if identity < .2:
             parsed_recs = [rec for rec in SeqIO.parse(fastas[0], "fasta")]
             if len(parsed_recs) != 1:
                 print("File %s has more than 1 record?" % str(f))
@@ -208,7 +211,7 @@ def simple_aggregate(raw_dir: Path):
             if count % 5000 == 0:
                 print("%d sequences added out of %d read" % (count, total))
 
-    SeqIO.write(seqrecs, "cullUR50_100K.fasta", "fasta")
+    SeqIO.write(seqrecs, "cullUR50_20pc_200K.fasta", "fasta")
 
 
 if __name__ == "__main__":

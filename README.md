@@ -42,6 +42,11 @@ The PISCES server checks each CHAIN of a PDB entry individually. As such, the cp
 
 The `parse_dssp.py` script will split dssp files into their constituent chains, appending the chain id to the end of the dssp_id, and creating records for each chain. Some edges cases where the parser incorrectly identifies the chain id exist, but those are skipped.
 
+### Note on CPDB sequences with the character 'b', and 'j', and 'o', and 'u', and 'z'
+According to the description of DSSP, lowercase characters indicate a SS-bridge Cysteine. These come in pairs; only some of them show up as bad characters, because when capitalized, some are valid amino acid codes.
+
+The strategy for these is thus to replace them with 'C' for cysteine.
+
 ### Next Steps
 The rest of this notebook will assume that a list downloaded from PISCES as well as some number of .csv files containing the parsed DSSP data exist in a `data/dssp` folder.
 
@@ -62,11 +67,11 @@ datadir = str(Path(Path.home(), "data", "dssp"))
 
 
 ```python
-from merge_data import merge
-merged = merge()
+# from merge_data import merge
+# merged = merge()
 
-merged = merged[merged.seq.str.len() > 25]
-merged.to_csv(datadir+"/cpdb2_records.csv")
+# merged = merged[merged.seq.str.len() > 25]
+# merged.to_csv(datadir+"/cpdb2_records.csv")
 ```
 
 ## Generate the Position-Specific Similary Matrices
@@ -101,19 +106,14 @@ psiblast -db uniref90_filt_db -query example.fasta -out output.psiblast -evalue 
 
 **Note** that PSIBLAST will only save the PSSM for a SINGLE protein at a time. Each new profile score overwrites the previous, so the sequences need to be run independently.
 
-# Creating a dataset without PSIBLAST
+# Physicochemical properties
 
-## Creating .TFRecords files
-
-We could use the string pairs directly as inputs to a learning model. The TensorFlow tf.data API allows for reading text data and converting to feature vectors as a preprocessing step in a model. However, this places a heavy computational bottleneck at the CPU that could slow down training. Since the dataset is ~14k sequences, we can save them directly as feature vectors in a .tfrecords file that is loaded into memory at training.
-
-## Features
-
-Oftentimes, position-specific features are calculated using PSIBLAST or hidden markov models. To keep things simple at this stage, we can simply append feature vectors that correspond to the amino acids / secondary structures of the sequence and save those as TF records. The features are the following:
+Along with position-specific similarity matrix scores, we also use a number of physicochemical properties to describe amino acids:
 
 
 ```python
-aa_feats = pd.read_csv("./cpdb2_aa_features.csv", index_col=0)
+aa_feats = pd.read_csv("aa_feats.csv", index_col=0)
+aa_feats = aa_feats.drop(labels=["X"], axis=0)
 aa_feats
 ```
 
@@ -138,617 +138,291 @@ aa_feats
   <thead>
     <tr style="text-align: right;">
       <th></th>
-      <th>A</th>
-      <th>C</th>
-      <th>D</th>
-      <th>E</th>
-      <th>F</th>
-      <th>G</th>
-      <th>H</th>
-      <th>I</th>
-      <th>K</th>
-      <th>L</th>
-      <th>...</th>
-      <th>X</th>
-      <th>!</th>
-      <th>SOS</th>
-      <th>EOS</th>
       <th>hydrophobicity</th>
       <th>polar</th>
       <th>hydropathy intensity</th>
       <th>hydrophilicity</th>
       <th>pH_l</th>
       <th>vdW_vol</th>
+      <th>pK1</th>
+      <th>pK2</th>
+      <th>steric</th>
+      <th>polarizability</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <th>A</th>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
       <td>0.0</td>
       <td>0.0</td>
       <td>1.8</td>
       <td>3.0</td>
       <td>6.01</td>
       <td>67.0</td>
+      <td>2.35</td>
+      <td>9.87</td>
+      <td>1.28</td>
+      <td>0.05</td>
     </tr>
     <tr>
       <th>C</th>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
       <td>1.0</td>
       <td>-1.0</td>
       <td>2.5</td>
       <td>-1.0</td>
       <td>5.05</td>
       <td>86.0</td>
+      <td>1.92</td>
+      <td>10.70</td>
+      <td>1.77</td>
+      <td>0.13</td>
     </tr>
     <tr>
       <th>D</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
       <td>2.0</td>
       <td>1.0</td>
       <td>-3.5</td>
       <td>3.0</td>
       <td>2.85</td>
       <td>91.0</td>
+      <td>1.99</td>
+      <td>9.90</td>
+      <td>1.60</td>
+      <td>0.11</td>
     </tr>
     <tr>
       <th>E</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
       <td>2.0</td>
       <td>1.0</td>
       <td>-3.5</td>
       <td>3.0</td>
       <td>3.15</td>
       <td>109.0</td>
+      <td>2.10</td>
+      <td>9.47</td>
+      <td>0.00</td>
+      <td>0.15</td>
     </tr>
     <tr>
       <th>F</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
       <td>1.0</td>
       <td>-1.0</td>
       <td>2.8</td>
       <td>-2.5</td>
       <td>5.49</td>
       <td>135.0</td>
+      <td>2.20</td>
+      <td>9.31</td>
+      <td>2.94</td>
+      <td>0.29</td>
     </tr>
     <tr>
       <th>G</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
       <td>0.0</td>
       <td>0.0</td>
       <td>-0.4</td>
       <td>0.0</td>
       <td>6.06</td>
       <td>48.0</td>
+      <td>2.35</td>
+      <td>9.78</td>
+      <td>0.00</td>
+      <td>0.00</td>
     </tr>
     <tr>
       <th>H</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
       <td>-1.0</td>
       <td>1.0</td>
       <td>-3.2</td>
       <td>-0.5</td>
       <td>7.60</td>
       <td>118.0</td>
+      <td>1.80</td>
+      <td>9.33</td>
+      <td>2.99</td>
+      <td>0.23</td>
     </tr>
     <tr>
       <th>I</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
       <td>1.0</td>
       <td>-1.0</td>
       <td>4.5</td>
       <td>-1.8</td>
       <td>6.05</td>
       <td>124.0</td>
+      <td>2.32</td>
+      <td>9.76</td>
+      <td>4.19</td>
+      <td>0.19</td>
     </tr>
     <tr>
       <th>K</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
       <td>2.0</td>
       <td>1.0</td>
       <td>-3.9</td>
       <td>3.0</td>
       <td>9.60</td>
       <td>135.0</td>
+      <td>2.16</td>
+      <td>9.06</td>
+      <td>1.89</td>
+      <td>0.22</td>
     </tr>
     <tr>
       <th>L</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
       <td>1.0</td>
       <td>-1.0</td>
       <td>3.8</td>
       <td>-1.8</td>
       <td>6.01</td>
       <td>124.0</td>
+      <td>2.33</td>
+      <td>9.74</td>
+      <td>2.59</td>
+      <td>0.19</td>
     </tr>
     <tr>
       <th>M</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
       <td>1.0</td>
       <td>-1.0</td>
       <td>1.9</td>
       <td>-1.3</td>
       <td>5.74</td>
       <td>124.0</td>
+      <td>2.13</td>
+      <td>9.28</td>
+      <td>2.35</td>
+      <td>0.22</td>
     </tr>
     <tr>
       <th>N</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
       <td>-2.0</td>
       <td>1.0</td>
       <td>-3.5</td>
       <td>0.2</td>
       <td>5.41</td>
       <td>96.0</td>
+      <td>2.14</td>
+      <td>8.72</td>
+      <td>1.60</td>
+      <td>0.13</td>
     </tr>
     <tr>
       <th>P</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
       <td>-1.0</td>
       <td>0.0</td>
       <td>1.6</td>
       <td>0.0</td>
       <td>6.30</td>
       <td>90.0</td>
+      <td>1.95</td>
+      <td>10.64</td>
+      <td>2.67</td>
+      <td>0.00</td>
     </tr>
     <tr>
       <th>Q</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
       <td>-2.0</td>
       <td>1.0</td>
       <td>-3.5</td>
       <td>0.2</td>
       <td>5.65</td>
       <td>114.0</td>
+      <td>2.17</td>
+      <td>9.13</td>
+      <td>1.56</td>
+      <td>0.18</td>
     </tr>
     <tr>
       <th>R</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
       <td>2.0</td>
       <td>1.0</td>
       <td>-4.5</td>
       <td>3.0</td>
       <td>10.76</td>
       <td>148.0</td>
+      <td>1.82</td>
+      <td>8.99</td>
+      <td>2.34</td>
+      <td>0.29</td>
     </tr>
     <tr>
       <th>S</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
       <td>-2.0</td>
       <td>0.0</td>
       <td>-0.8</td>
       <td>0.3</td>
       <td>5.68</td>
       <td>73.0</td>
+      <td>2.19</td>
+      <td>9.21</td>
+      <td>1.31</td>
+      <td>0.06</td>
     </tr>
     <tr>
       <th>T</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
       <td>-2.0</td>
       <td>0.0</td>
       <td>-0.7</td>
       <td>-0.4</td>
       <td>5.60</td>
       <td>93.0</td>
+      <td>2.09</td>
+      <td>9.10</td>
+      <td>3.03</td>
+      <td>0.11</td>
     </tr>
     <tr>
       <th>V</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
       <td>1.0</td>
       <td>-1.0</td>
       <td>4.2</td>
       <td>-1.5</td>
       <td>6.00</td>
       <td>105.0</td>
+      <td>2.39</td>
+      <td>9.74</td>
+      <td>3.67</td>
+      <td>0.14</td>
     </tr>
     <tr>
       <th>W</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
       <td>1.0</td>
       <td>-1.0</td>
       <td>-0.9</td>
       <td>-3.4</td>
       <td>5.89</td>
       <td>163.0</td>
+      <td>2.46</td>
+      <td>9.41</td>
+      <td>3.21</td>
+      <td>0.41</td>
     </tr>
     <tr>
       <th>Y</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
       <td>-2.0</td>
       <td>-1.0</td>
       <td>-1.3</td>
       <td>-2.3</td>
       <td>5.64</td>
       <td>141.0</td>
-    </tr>
-    <tr>
-      <th>X</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.00</td>
-      <td>0.0</td>
-    </tr>
-    <tr>
-      <th>!</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.00</td>
-      <td>0.0</td>
-    </tr>
-    <tr>
-      <th>SOS</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.00</td>
-      <td>0.0</td>
-    </tr>
-    <tr>
-      <th>EOS</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.00</td>
-      <td>0.0</td>
+      <td>2.20</td>
+      <td>9.21</td>
+      <td>2.94</td>
+      <td>0.30</td>
     </tr>
   </tbody>
 </table>
-<p>24 rows × 30 columns</p>
 </div>
 
 
 
+### PCA on features
+There is some redundancy in these features, which we can see by examining the correlation coefficients.
+
 
 ```python
-ss_feats = pd.read_csv("./cpdb2_ss_features.csv", index_col=0)
-ss_feats
+aa_feats.corr()
 ```
 
 
@@ -772,161 +446,148 @@ ss_feats
   <thead>
     <tr style="text-align: right;">
       <th></th>
-      <th>H</th>
-      <th>B</th>
-      <th>E</th>
-      <th>G</th>
-      <th>I</th>
-      <th>T</th>
-      <th>S</th>
-      <th>U</th>
-      <th>SOS</th>
-      <th>EOS</th>
-    </tr>
-    <tr>
-      <th>labels</th>
-      <th></th>
-      <th></th>
-      <th></th>
-      <th></th>
-      <th></th>
-      <th></th>
-      <th></th>
-      <th></th>
-      <th></th>
-      <th></th>
+      <th>hydrophobicity</th>
+      <th>polar</th>
+      <th>hydropathy intensity</th>
+      <th>hydrophilicity</th>
+      <th>pH_l</th>
+      <th>vdW_vol</th>
+      <th>pK1</th>
+      <th>pK2</th>
+      <th>steric</th>
+      <th>polarizability</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <th>H</th>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
+      <th>hydrophobicity</th>
+      <td>1.000000</td>
+      <td>-0.071685</td>
+      <td>0.116361</td>
+      <td>0.256511</td>
+      <td>0.098194</td>
+      <td>0.304599</td>
+      <td>0.018649</td>
+      <td>0.237080</td>
+      <td>-0.023572</td>
+      <td>0.265580</td>
     </tr>
     <tr>
-      <th>B</th>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
+      <th>polar</th>
+      <td>-0.071685</td>
+      <td>1.000000</td>
+      <td>-0.856103</td>
+      <td>0.793689</td>
+      <td>0.175193</td>
+      <td>-0.167100</td>
+      <td>-0.515392</td>
+      <td>-0.352830</td>
+      <td>-0.514872</td>
+      <td>-0.220739</td>
     </tr>
     <tr>
-      <th>E</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
+      <th>hydropathy intensity</th>
+      <td>0.116361</td>
+      <td>-0.856103</td>
+      <td>1.000000</td>
+      <td>-0.579074</td>
+      <td>-0.185182</td>
+      <td>-0.116596</td>
+      <td>0.459863</td>
+      <td>0.544784</td>
+      <td>0.452738</td>
+      <td>-0.141111</td>
     </tr>
     <tr>
-      <th>G</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
+      <th>hydrophilicity</th>
+      <td>0.256511</td>
+      <td>0.793689</td>
+      <td>-0.579074</td>
+      <td>1.000000</td>
+      <td>0.144248</td>
+      <td>-0.319574</td>
+      <td>-0.385994</td>
+      <td>-0.071089</td>
+      <td>-0.613583</td>
+      <td>-0.391803</td>
     </tr>
     <tr>
-      <th>I</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
+      <th>pH_l</th>
+      <td>0.098194</td>
+      <td>0.175193</td>
+      <td>-0.185182</td>
+      <td>0.144248</td>
+      <td>1.000000</td>
+      <td>0.364222</td>
+      <td>-0.214373</td>
+      <td>-0.301306</td>
+      <td>0.253380</td>
+      <td>0.286892</td>
     </tr>
     <tr>
-      <th>T</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
+      <th>vdW_vol</th>
+      <td>0.304599</td>
+      <td>-0.167100</td>
+      <td>-0.116596</td>
+      <td>-0.319574</td>
+      <td>0.364222</td>
+      <td>1.000000</td>
+      <td>-0.009948</td>
+      <td>-0.400525</td>
+      <td>0.567074</td>
+      <td>0.939633</td>
     </tr>
     <tr>
-      <th>S</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
+      <th>pK1</th>
+      <td>0.018649</td>
+      <td>-0.515392</td>
+      <td>0.459863</td>
+      <td>-0.385994</td>
+      <td>-0.214373</td>
+      <td>-0.009948</td>
+      <td>1.000000</td>
+      <td>-0.057576</td>
+      <td>0.081364</td>
+      <td>0.057177</td>
     </tr>
     <tr>
-      <th>U</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
+      <th>pK2</th>
+      <td>0.237080</td>
+      <td>-0.352830</td>
+      <td>0.544784</td>
+      <td>-0.071089</td>
+      <td>-0.301306</td>
+      <td>-0.400525</td>
+      <td>-0.057576</td>
+      <td>1.000000</td>
+      <td>-0.005957</td>
+      <td>-0.450413</td>
     </tr>
     <tr>
-      <th>SOS</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>0.0</td>
+      <th>steric</th>
+      <td>-0.023572</td>
+      <td>-0.514872</td>
+      <td>0.452738</td>
+      <td>-0.613583</td>
+      <td>0.253380</td>
+      <td>0.567074</td>
+      <td>0.081364</td>
+      <td>-0.005957</td>
+      <td>1.000000</td>
+      <td>0.484432</td>
     </tr>
     <tr>
-      <th>EOS</th>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>1.0</td>
+      <th>polarizability</th>
+      <td>0.265580</td>
+      <td>-0.220739</td>
+      <td>-0.141111</td>
+      <td>-0.391803</td>
+      <td>0.286892</td>
+      <td>0.939633</td>
+      <td>0.057177</td>
+      <td>-0.450413</td>
+      <td>0.484432</td>
+      <td>1.000000</td>
     </tr>
   </tbody>
 </table>
@@ -934,14 +595,843 @@ ss_feats
 
 
 
-The secondary structures are the targets, and so their "features" are simply one-hot encodings of the letters, including special SOS/EOS tokens.
-The amino acid features include a one-hot encoding the 20 proteinogenic amino acids as well as six physicochemical properties: hydrophobicity, polarity, hydropathy intensity, hydrophilicity, isoelectric point, and van der Waals volume. 
 
-See the [make_tfrecords.py](./make_tfrecords.py) script for how the protein sequences are processed into tf records.
+```python
+from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+```
 
-These files are read into TensorFlow models using the tf.data API.
 
-### Note on cpdb2 sequences with the character 'b', and 'j', and 'o', and 'u', and 'z'
-According to the description of DSSP, lowercase characters indicate a SS-bridge Cysteine. These come in pairs; only some of them show up as bad characters, because when capitalized, some are valid amino acid codes.
+```python
+pca = PCA(n_components=3)
+pca.fit(aa_feats.values)
+X = pca.transform(aa_feats.values)
+```
 
-The strategy for these is thus to replace them with 'C' for cysteine.
+
+```python
+fig = plt.figure(1, figsize=(8, 6))
+plt.clf()
+ax = Axes3D(fig)
+ax.scatter(X[:, 0], X[:, 1], X[:, 2], c=X[:, 0], cmap=plt.cm.viridis)
+for i, txt in enumerate(list(aa_feats.index)):
+    ax.text(X[i, 0], X[i, 1], X[i, 2], "%s" % (txt), size=15, color="k")
+plt.show()
+```
+
+
+![png](output_33_0.png)
+
+
+We remove any features that has an absolute correlation coefficient with any other feature greater than 0.6, leaving us with:
+
+
+```python
+low_corr_feats = ["hydrophobicity", "hydropathy intensity", "pH_l", "pK1", "pK2", "steric", "polarizability"]
+aa_feats_2 = aa_feats[low_corr_feats]
+```
+
+
+```python
+aa_feats_2
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>hydrophobicity</th>
+      <th>hydropathy intensity</th>
+      <th>pH_l</th>
+      <th>pK1</th>
+      <th>pK2</th>
+      <th>steric</th>
+      <th>polarizability</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>A</th>
+      <td>0.0</td>
+      <td>1.8</td>
+      <td>6.01</td>
+      <td>2.35</td>
+      <td>9.87</td>
+      <td>1.28</td>
+      <td>0.05</td>
+    </tr>
+    <tr>
+      <th>C</th>
+      <td>1.0</td>
+      <td>2.5</td>
+      <td>5.05</td>
+      <td>1.92</td>
+      <td>10.70</td>
+      <td>1.77</td>
+      <td>0.13</td>
+    </tr>
+    <tr>
+      <th>D</th>
+      <td>2.0</td>
+      <td>-3.5</td>
+      <td>2.85</td>
+      <td>1.99</td>
+      <td>9.90</td>
+      <td>1.60</td>
+      <td>0.11</td>
+    </tr>
+    <tr>
+      <th>E</th>
+      <td>2.0</td>
+      <td>-3.5</td>
+      <td>3.15</td>
+      <td>2.10</td>
+      <td>9.47</td>
+      <td>0.00</td>
+      <td>0.15</td>
+    </tr>
+    <tr>
+      <th>F</th>
+      <td>1.0</td>
+      <td>2.8</td>
+      <td>5.49</td>
+      <td>2.20</td>
+      <td>9.31</td>
+      <td>2.94</td>
+      <td>0.29</td>
+    </tr>
+    <tr>
+      <th>G</th>
+      <td>0.0</td>
+      <td>-0.4</td>
+      <td>6.06</td>
+      <td>2.35</td>
+      <td>9.78</td>
+      <td>0.00</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>H</th>
+      <td>-1.0</td>
+      <td>-3.2</td>
+      <td>7.60</td>
+      <td>1.80</td>
+      <td>9.33</td>
+      <td>2.99</td>
+      <td>0.23</td>
+    </tr>
+    <tr>
+      <th>I</th>
+      <td>1.0</td>
+      <td>4.5</td>
+      <td>6.05</td>
+      <td>2.32</td>
+      <td>9.76</td>
+      <td>4.19</td>
+      <td>0.19</td>
+    </tr>
+    <tr>
+      <th>K</th>
+      <td>2.0</td>
+      <td>-3.9</td>
+      <td>9.60</td>
+      <td>2.16</td>
+      <td>9.06</td>
+      <td>1.89</td>
+      <td>0.22</td>
+    </tr>
+    <tr>
+      <th>L</th>
+      <td>1.0</td>
+      <td>3.8</td>
+      <td>6.01</td>
+      <td>2.33</td>
+      <td>9.74</td>
+      <td>2.59</td>
+      <td>0.19</td>
+    </tr>
+    <tr>
+      <th>M</th>
+      <td>1.0</td>
+      <td>1.9</td>
+      <td>5.74</td>
+      <td>2.13</td>
+      <td>9.28</td>
+      <td>2.35</td>
+      <td>0.22</td>
+    </tr>
+    <tr>
+      <th>N</th>
+      <td>-2.0</td>
+      <td>-3.5</td>
+      <td>5.41</td>
+      <td>2.14</td>
+      <td>8.72</td>
+      <td>1.60</td>
+      <td>0.13</td>
+    </tr>
+    <tr>
+      <th>P</th>
+      <td>-1.0</td>
+      <td>1.6</td>
+      <td>6.30</td>
+      <td>1.95</td>
+      <td>10.64</td>
+      <td>2.67</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>Q</th>
+      <td>-2.0</td>
+      <td>-3.5</td>
+      <td>5.65</td>
+      <td>2.17</td>
+      <td>9.13</td>
+      <td>1.56</td>
+      <td>0.18</td>
+    </tr>
+    <tr>
+      <th>R</th>
+      <td>2.0</td>
+      <td>-4.5</td>
+      <td>10.76</td>
+      <td>1.82</td>
+      <td>8.99</td>
+      <td>2.34</td>
+      <td>0.29</td>
+    </tr>
+    <tr>
+      <th>S</th>
+      <td>-2.0</td>
+      <td>-0.8</td>
+      <td>5.68</td>
+      <td>2.19</td>
+      <td>9.21</td>
+      <td>1.31</td>
+      <td>0.06</td>
+    </tr>
+    <tr>
+      <th>T</th>
+      <td>-2.0</td>
+      <td>-0.7</td>
+      <td>5.60</td>
+      <td>2.09</td>
+      <td>9.10</td>
+      <td>3.03</td>
+      <td>0.11</td>
+    </tr>
+    <tr>
+      <th>V</th>
+      <td>1.0</td>
+      <td>4.2</td>
+      <td>6.00</td>
+      <td>2.39</td>
+      <td>9.74</td>
+      <td>3.67</td>
+      <td>0.14</td>
+    </tr>
+    <tr>
+      <th>W</th>
+      <td>1.0</td>
+      <td>-0.9</td>
+      <td>5.89</td>
+      <td>2.46</td>
+      <td>9.41</td>
+      <td>3.21</td>
+      <td>0.41</td>
+    </tr>
+    <tr>
+      <th>Y</th>
+      <td>-2.0</td>
+      <td>-1.3</td>
+      <td>5.64</td>
+      <td>2.20</td>
+      <td>9.21</td>
+      <td>2.94</td>
+      <td>0.30</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+To make the features more amenable to training, we normalize the features except for hydrophobicity.
+
+
+```python
+for feat in ["hydropathy intensity", "pH_l", "pK1", "pK2", "steric", "polarizability"]:
+    aa_feats_2[feat] = (aa_feats_2[feat] - aa_feats_2[feat].mean()) / aa_feats_2[feat].std()
+aa_feats_2
+```
+
+    /home/dillon/.conda/envs/tf1_7/lib/python3.6/site-packages/ipykernel_launcher.py:2: SettingWithCopyWarning: 
+    A value is trying to be set on a copy of a slice from a DataFrame.
+    Try using .loc[row_indexer,col_indexer] = value instead
+    
+    See the caveats in the documentation: http://pandas.pydata.org/pandas-docs/stable/indexing.html#indexing-view-versus-copy
+      
+
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>hydrophobicity</th>
+      <th>hydropathy intensity</th>
+      <th>pH_l</th>
+      <th>pK1</th>
+      <th>pK2</th>
+      <th>steric</th>
+      <th>polarizability</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>A</th>
+      <td>0.0</td>
+      <td>0.707641</td>
+      <td>-0.009696</td>
+      <td>1.058258</td>
+      <td>0.691227</td>
+      <td>-0.838612</td>
+      <td>-1.144703</td>
+    </tr>
+    <tr>
+      <th>C</th>
+      <td>1.0</td>
+      <td>0.940199</td>
+      <td>-0.557225</td>
+      <td>-1.251645</td>
+      <td>2.318798</td>
+      <td>-0.390254</td>
+      <td>-0.381568</td>
+    </tr>
+    <tr>
+      <th>D</th>
+      <td>2.0</td>
+      <td>-1.053156</td>
+      <td>-1.811980</td>
+      <td>-0.875614</td>
+      <td>0.750055</td>
+      <td>-0.545807</td>
+      <td>-0.572351</td>
+    </tr>
+    <tr>
+      <th>E</th>
+      <td>2.0</td>
+      <td>-1.053156</td>
+      <td>-1.640877</td>
+      <td>-0.284709</td>
+      <td>-0.093144</td>
+      <td>-2.009831</td>
+      <td>-0.190784</td>
+    </tr>
+    <tr>
+      <th>F</th>
+      <td>1.0</td>
+      <td>1.039867</td>
+      <td>-0.306274</td>
+      <td>0.252478</td>
+      <td>-0.406893</td>
+      <td>0.680314</td>
+      <td>1.144703</td>
+    </tr>
+    <tr>
+      <th>G</th>
+      <td>0.0</td>
+      <td>-0.023256</td>
+      <td>0.018821</td>
+      <td>1.058258</td>
+      <td>0.514744</td>
+      <td>-2.009831</td>
+      <td>-1.621663</td>
+    </tr>
+    <tr>
+      <th>H</th>
+      <td>-1.0</td>
+      <td>-0.953488</td>
+      <td>0.897150</td>
+      <td>-1.896269</td>
+      <td>-0.367674</td>
+      <td>0.726065</td>
+      <td>0.572351</td>
+    </tr>
+    <tr>
+      <th>I</th>
+      <td>1.0</td>
+      <td>1.604651</td>
+      <td>0.013118</td>
+      <td>0.897102</td>
+      <td>0.475525</td>
+      <td>1.824083</td>
+      <td>0.190784</td>
+    </tr>
+    <tr>
+      <th>K</th>
+      <td>2.0</td>
+      <td>-1.186046</td>
+      <td>2.037835</td>
+      <td>0.037603</td>
+      <td>-0.897125</td>
+      <td>-0.280452</td>
+      <td>0.476960</td>
+    </tr>
+    <tr>
+      <th>L</th>
+      <td>1.0</td>
+      <td>1.372093</td>
+      <td>-0.009696</td>
+      <td>0.950821</td>
+      <td>0.436307</td>
+      <td>0.360059</td>
+      <td>0.190784</td>
+    </tr>
+    <tr>
+      <th>M</th>
+      <td>1.0</td>
+      <td>0.740864</td>
+      <td>-0.163688</td>
+      <td>-0.123553</td>
+      <td>-0.465720</td>
+      <td>0.140455</td>
+      <td>0.476960</td>
+    </tr>
+    <tr>
+      <th>N</th>
+      <td>-2.0</td>
+      <td>-1.053156</td>
+      <td>-0.351902</td>
+      <td>-0.069834</td>
+      <td>-1.563840</td>
+      <td>-0.545807</td>
+      <td>-0.381568</td>
+    </tr>
+    <tr>
+      <th>P</th>
+      <td>-1.0</td>
+      <td>0.641196</td>
+      <td>0.155704</td>
+      <td>-1.090489</td>
+      <td>2.201142</td>
+      <td>0.433260</td>
+      <td>-1.621663</td>
+    </tr>
+    <tr>
+      <th>Q</th>
+      <td>-2.0</td>
+      <td>-1.053156</td>
+      <td>-0.215019</td>
+      <td>0.091322</td>
+      <td>-0.759860</td>
+      <td>-0.582407</td>
+      <td>0.095392</td>
+    </tr>
+    <tr>
+      <th>R</th>
+      <td>2.0</td>
+      <td>-1.385382</td>
+      <td>2.699433</td>
+      <td>-1.788832</td>
+      <td>-1.034390</td>
+      <td>0.131305</td>
+      <td>1.144703</td>
+    </tr>
+    <tr>
+      <th>S</th>
+      <td>-2.0</td>
+      <td>-0.156146</td>
+      <td>-0.197909</td>
+      <td>0.198759</td>
+      <td>-0.602985</td>
+      <td>-0.811161</td>
+      <td>-1.049311</td>
+    </tr>
+    <tr>
+      <th>T</th>
+      <td>-2.0</td>
+      <td>-0.122924</td>
+      <td>-0.243536</td>
+      <td>-0.338428</td>
+      <td>-0.818688</td>
+      <td>0.762665</td>
+      <td>-0.572351</td>
+    </tr>
+    <tr>
+      <th>V</th>
+      <td>1.0</td>
+      <td>1.504983</td>
+      <td>-0.015399</td>
+      <td>1.273133</td>
+      <td>0.436307</td>
+      <td>1.348275</td>
+      <td>-0.286176</td>
+    </tr>
+    <tr>
+      <th>W</th>
+      <td>1.0</td>
+      <td>-0.189369</td>
+      <td>-0.078137</td>
+      <td>1.649163</td>
+      <td>-0.210800</td>
+      <td>0.927368</td>
+      <td>2.289406</td>
+    </tr>
+    <tr>
+      <th>Y</th>
+      <td>-2.0</td>
+      <td>-0.322259</td>
+      <td>-0.220723</td>
+      <td>0.252478</td>
+      <td>-0.602985</td>
+      <td>0.680314</td>
+      <td>1.240095</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+
+```python
+aa_feats_2.mean(axis=0)
+```
+
+
+
+
+    hydrophobicity          1.500000e-01
+    hydropathy intensity   -5.551115e-18
+    pH_l                    3.733125e-16
+    pK1                     2.375877e-15
+    pK2                    -3.314016e-15
+    steric                  1.110223e-16
+    polarizability         -1.110223e-16
+    dtype: float64
+
+
+
+
+```python
+aa_feats_2.std(axis=0)
+```
+
+
+
+
+    hydrophobicity          1.531253
+    hydropathy intensity    1.000000
+    pH_l                    1.000000
+    pK1                     1.000000
+    pK2                     1.000000
+    steric                  1.000000
+    polarizability          1.000000
+    dtype: float64
+
+
+
+
+```python
+# re-add the "unknown" amino acid character, X
+aa_feats_2.loc["X"] = [0 for _ in range(aa_feats_2.shape[1])]
+```
+
+    /home/dillon/.conda/envs/tf1_7/lib/python3.6/site-packages/ipykernel_launcher.py:2: SettingWithCopyWarning: 
+    A value is trying to be set on a copy of a slice from a DataFrame
+    
+    See the caveats in the documentation: http://pandas.pydata.org/pandas-docs/stable/indexing.html#indexing-view-versus-copy
+      
+
+
+
+```python
+aa_feats_2
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>hydrophobicity</th>
+      <th>hydropathy intensity</th>
+      <th>pH_l</th>
+      <th>pK1</th>
+      <th>pK2</th>
+      <th>steric</th>
+      <th>polarizability</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>A</th>
+      <td>0.0</td>
+      <td>0.707641</td>
+      <td>-0.009696</td>
+      <td>1.058258</td>
+      <td>0.691227</td>
+      <td>-0.838612</td>
+      <td>-1.144703</td>
+    </tr>
+    <tr>
+      <th>C</th>
+      <td>1.0</td>
+      <td>0.940199</td>
+      <td>-0.557225</td>
+      <td>-1.251645</td>
+      <td>2.318798</td>
+      <td>-0.390254</td>
+      <td>-0.381568</td>
+    </tr>
+    <tr>
+      <th>D</th>
+      <td>2.0</td>
+      <td>-1.053156</td>
+      <td>-1.811980</td>
+      <td>-0.875614</td>
+      <td>0.750055</td>
+      <td>-0.545807</td>
+      <td>-0.572351</td>
+    </tr>
+    <tr>
+      <th>E</th>
+      <td>2.0</td>
+      <td>-1.053156</td>
+      <td>-1.640877</td>
+      <td>-0.284709</td>
+      <td>-0.093144</td>
+      <td>-2.009831</td>
+      <td>-0.190784</td>
+    </tr>
+    <tr>
+      <th>F</th>
+      <td>1.0</td>
+      <td>1.039867</td>
+      <td>-0.306274</td>
+      <td>0.252478</td>
+      <td>-0.406893</td>
+      <td>0.680314</td>
+      <td>1.144703</td>
+    </tr>
+    <tr>
+      <th>G</th>
+      <td>0.0</td>
+      <td>-0.023256</td>
+      <td>0.018821</td>
+      <td>1.058258</td>
+      <td>0.514744</td>
+      <td>-2.009831</td>
+      <td>-1.621663</td>
+    </tr>
+    <tr>
+      <th>H</th>
+      <td>-1.0</td>
+      <td>-0.953488</td>
+      <td>0.897150</td>
+      <td>-1.896269</td>
+      <td>-0.367674</td>
+      <td>0.726065</td>
+      <td>0.572351</td>
+    </tr>
+    <tr>
+      <th>I</th>
+      <td>1.0</td>
+      <td>1.604651</td>
+      <td>0.013118</td>
+      <td>0.897102</td>
+      <td>0.475525</td>
+      <td>1.824083</td>
+      <td>0.190784</td>
+    </tr>
+    <tr>
+      <th>K</th>
+      <td>2.0</td>
+      <td>-1.186046</td>
+      <td>2.037835</td>
+      <td>0.037603</td>
+      <td>-0.897125</td>
+      <td>-0.280452</td>
+      <td>0.476960</td>
+    </tr>
+    <tr>
+      <th>L</th>
+      <td>1.0</td>
+      <td>1.372093</td>
+      <td>-0.009696</td>
+      <td>0.950821</td>
+      <td>0.436307</td>
+      <td>0.360059</td>
+      <td>0.190784</td>
+    </tr>
+    <tr>
+      <th>M</th>
+      <td>1.0</td>
+      <td>0.740864</td>
+      <td>-0.163688</td>
+      <td>-0.123553</td>
+      <td>-0.465720</td>
+      <td>0.140455</td>
+      <td>0.476960</td>
+    </tr>
+    <tr>
+      <th>N</th>
+      <td>-2.0</td>
+      <td>-1.053156</td>
+      <td>-0.351902</td>
+      <td>-0.069834</td>
+      <td>-1.563840</td>
+      <td>-0.545807</td>
+      <td>-0.381568</td>
+    </tr>
+    <tr>
+      <th>P</th>
+      <td>-1.0</td>
+      <td>0.641196</td>
+      <td>0.155704</td>
+      <td>-1.090489</td>
+      <td>2.201142</td>
+      <td>0.433260</td>
+      <td>-1.621663</td>
+    </tr>
+    <tr>
+      <th>Q</th>
+      <td>-2.0</td>
+      <td>-1.053156</td>
+      <td>-0.215019</td>
+      <td>0.091322</td>
+      <td>-0.759860</td>
+      <td>-0.582407</td>
+      <td>0.095392</td>
+    </tr>
+    <tr>
+      <th>R</th>
+      <td>2.0</td>
+      <td>-1.385382</td>
+      <td>2.699433</td>
+      <td>-1.788832</td>
+      <td>-1.034390</td>
+      <td>0.131305</td>
+      <td>1.144703</td>
+    </tr>
+    <tr>
+      <th>S</th>
+      <td>-2.0</td>
+      <td>-0.156146</td>
+      <td>-0.197909</td>
+      <td>0.198759</td>
+      <td>-0.602985</td>
+      <td>-0.811161</td>
+      <td>-1.049311</td>
+    </tr>
+    <tr>
+      <th>T</th>
+      <td>-2.0</td>
+      <td>-0.122924</td>
+      <td>-0.243536</td>
+      <td>-0.338428</td>
+      <td>-0.818688</td>
+      <td>0.762665</td>
+      <td>-0.572351</td>
+    </tr>
+    <tr>
+      <th>V</th>
+      <td>1.0</td>
+      <td>1.504983</td>
+      <td>-0.015399</td>
+      <td>1.273133</td>
+      <td>0.436307</td>
+      <td>1.348275</td>
+      <td>-0.286176</td>
+    </tr>
+    <tr>
+      <th>W</th>
+      <td>1.0</td>
+      <td>-0.189369</td>
+      <td>-0.078137</td>
+      <td>1.649163</td>
+      <td>-0.210800</td>
+      <td>0.927368</td>
+      <td>2.289406</td>
+    </tr>
+    <tr>
+      <th>Y</th>
+      <td>-2.0</td>
+      <td>-0.322259</td>
+      <td>-0.220723</td>
+      <td>0.252478</td>
+      <td>-0.602985</td>
+      <td>0.680314</td>
+      <td>1.240095</td>
+    </tr>
+    <tr>
+      <th>X</th>
+      <td>0.0</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+      <td>0.000000</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+
+```python
+aa_feats_2.to_csv("aa_feats_final.csv")
+```

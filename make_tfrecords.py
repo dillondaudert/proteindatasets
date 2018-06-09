@@ -18,11 +18,80 @@ def _int64_feature(value):
 def _floats_feature(value):
     return tf.train.Feature(float_list=tf.train.FloatList(value=value))
 
+def cUR50_to_tfrecords():
+    """
+    Convert a pandas dataframe of protein sequences into a TFRecord
+    format.
+    Create a training and validation set 90/10 split.
+    """
+
+    data = pd.read_csv(HOME+"/data/cullpdb2_psiblast/cullUR50_20pc_189K.csv")
+
+    num_seqs = data.shape[0]
+    perm = np.random.permutation(num_seqs)
+    train_inds = perm[0:int(num_seqs*.9)]
+    valid_inds = perm[int(num_seqs*.9):]
+
+    train_file = HOME+"/data/cullpdb2_psiblast/cUR50_train.tfrecords"
+    valid_file = HOME+"/data/cullpdb2_psiblast/cUR50_valid.tfrecords"
+
+    print("Writing ", train_file)
+    train_writer = tf.python_io.TFRecordWriter(train_file)
+    for index in train_inds:
+        # convert the strings to
+        try:
+            sample = data.iloc[index]
+            seq_id = bytes(sample.uniref_id, "utf-8")
+            seq_len = len(sample.seq)
+            seq = bytes(sample.seq, "utf-8")
+            seq_phyche = prot_to_vector(sample.seq).reshape(-1)
+
+            tf_example = tf.train.Example(features=tf.train.Features(feature={
+                "uniref_id": _bytes_feature(seq_id),
+                "seq_len": _int64_feature(seq_len),
+                "seq": _bytes_feature(seq),
+                "seq_phyche": _floats_feature(seq_phyche)}))
+
+            train_writer.write(tf_example.SerializeToString())
+
+        except Exception as e:
+            print("Exception encountered while processing index %d" % index)
+            print(e)
+            print(sample.uniref_id)
+    train_writer.close()
+
+    print("Writing ", valid_file)
+    valid_writer = tf.python_io.TFRecordWriter(valid_file)
+    for index in valid_inds:
+        # convert the strings to
+        try:
+            sample = data.iloc[index]
+            seq_id = bytes(sample.uniref_id, "utf-8")
+            seq_len = len(sample.seq)
+            seq = bytes(sample.seq, "utf-8")
+            seq_phyche = prot_to_vector(sample.seq)
+
+            tf_example = tf.train.Example(features=tf.train.Features(feature={
+                "uniref_id": _bytes_feature(seq_id),
+                "seq_len": _int64_feature(seq_len),
+                "seq": _bytes_feature(seq),
+                "seq_phyche": _floats_feature(seq_phyche)}))
+
+            valid_writer.write(tf_example.SerializeToString())
+
+        except Exception as e:
+            print("Exception encountered while processing index %d" % index)
+            print(e)
+            print(sample.uniref_id)
+    valid_writer.close()
+
+
+
 def cpdb2_to_tfrecord():
     """
     Convert a pandas dataframe of protein, structure string pairs to TFRecord
     format.
-    Creates 5 pairs of training, validation data using 5-fold cross validation.
+    Create 5 pairs of training, validation data using 5-fold cross validation.
     """
 
     data = pd.read_csv(HOME+"/data/dssp/cpdb_dssp_14335.csv")
@@ -104,5 +173,5 @@ def cpdb2_to_tfrecord():
     print("Finished.")
 
 if __name__ == "__main__":
-    cpdb2_to_tfrecord()
+    cUR50_to_tfrecords()
 

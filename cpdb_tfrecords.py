@@ -98,6 +98,7 @@ def cpdb_to_tfrecord(datadir: str):
         valid_writer.write(example.SerializeToString())
     valid_writer.close()
 
+# TODO: Update this function
 def cpdb_513_to_tfrecord(datadir: str):
     """
     Convert the numpy array format for cpdb_513 to a TFRecord file.

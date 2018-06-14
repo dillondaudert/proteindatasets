@@ -25,18 +25,19 @@ def cUR50_to_tfrecords():
     Create a training and validation set 90/10 split.
     """
 
-    data = pd.read_csv(HOME+"/data/cullpdb2_psiblast/cullUR50_20pc_189K.csv")
+    data = pd.read_csv(HOME+"/data/cUR50/cullUR50_20pc_189K.csv")
 
     num_seqs = data.shape[0]
     perm = np.random.permutation(num_seqs)
     train_inds = perm[0:int(num_seqs*.9)]
     valid_inds = perm[int(num_seqs*.9):]
 
-    train_file = HOME+"/data/cullpdb2_psiblast/cUR50_train.tfrecords"
-    valid_file = HOME+"/data/cullpdb2_psiblast/cUR50_valid.tfrecords"
+    train_file = HOME+"/data/cUR50/cUR50_train.tfrecords"
+    valid_file = HOME+"/data/cUR50/cUR50_valid.tfrecords"
 
     print("Writing ", train_file)
     train_writer = tf.python_io.TFRecordWriter(train_file)
+    num_train = 0
     for index in train_inds:
         # convert the strings to
         try:
@@ -53,6 +54,7 @@ def cUR50_to_tfrecords():
                 "seq_phyche": _floats_feature(seq_phyche)}))
 
             train_writer.write(tf_example.SerializeToString())
+            num_train += 1
 
         except Exception as e:
             print("Exception encountered while processing index %d" % index)
@@ -62,6 +64,7 @@ def cUR50_to_tfrecords():
 
     print("Writing ", valid_file)
     valid_writer = tf.python_io.TFRecordWriter(valid_file)
+    num_valid = 0
     for index in valid_inds:
         # convert the strings to
         try:
@@ -69,7 +72,7 @@ def cUR50_to_tfrecords():
             seq_id = bytes(sample.uniref_id, "utf-8")
             seq_len = len(sample.seq)
             seq = bytes(sample.seq, "utf-8")
-            seq_phyche = prot_to_vector(sample.seq)
+            seq_phyche = prot_to_vector(sample.seq).reshape(-1)
 
             tf_example = tf.train.Example(features=tf.train.Features(feature={
                 "uniref_id": _bytes_feature(seq_id),
@@ -78,12 +81,14 @@ def cUR50_to_tfrecords():
                 "seq_phyche": _floats_feature(seq_phyche)}))
 
             valid_writer.write(tf_example.SerializeToString())
+            num_valid += 1
 
         except Exception as e:
             print("Exception encountered while processing index %d" % index)
             print(e)
             print(sample.uniref_id)
     valid_writer.close()
+    print("Wrote %d train and %d validation records" % (num_train, num_valid))
 
 
 if __name__ == "__main__":

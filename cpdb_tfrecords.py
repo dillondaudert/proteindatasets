@@ -64,8 +64,8 @@ def cpdb_to_tfrecord(datadir: str):
     print("train range: ", train_examples)
     print("valid range: ", valid_examples)
 
-    train_file = "TESTcpdb_train.tfrecords"
-    valid_file = "TESTcpdb_valid.tfrecords"
+    train_file = "cpdb_train.tfrecords"
+    valid_file = "cpdb_valid.tfrecords"
 
     print("Writing ", train_file)
     train_writer = tf.python_io.TFRecordWriter(train_file)
@@ -94,7 +94,6 @@ def cpdb_to_tfrecord(datadir: str):
         valid_writer.write(example.SerializeToString())
     valid_writer.close()
 
-# TODO: Update this function
 def cpdb_513_to_tfrecord(datadir: str):
     """
     Convert the numpy array format for cpdb_513 to a TFRecord file.
@@ -150,4 +149,4 @@ if not os.path.isdir(args.datadir):
 
 print("Processing data.")
 cpdb_to_tfrecord(args.datadir)
-#cpdb_513_to_tfrecord(args.datadir)
+cpdb_513_to_tfrecord(args.datadir)

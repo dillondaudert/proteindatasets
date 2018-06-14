@@ -59,8 +59,8 @@ def cpdb_to_tfrecord(datadir: str):
     seqs_pssm = data[:, :, 35:56]
 
     # Get the indices for training, validation set
-    train_examples = range(0, num_samples-256)
-    valid_examples = range(num_samples-256, num_samples)
+    train_examples = range(0, num_samples-512)
+    valid_examples = range(num_samples-512, num_samples)
     print("train range: ", train_examples)
     print("valid range: ", valid_examples)
 

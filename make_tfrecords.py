@@ -22,7 +22,7 @@ def cpdb2_to_tfrecord():
     """
     Convert a pandas dataframe of protein, structure string pairs to TFRecord
     format.
-    Creates 5 pairs of training, validation data using 5-fold cross validation.
+    Create 5 pairs of training, validation data using 5-fold cross validation.
     """
 
     data = pd.read_csv(HOME+"/data/dssp/cpdb_dssp_14335.csv")
@@ -102,7 +102,3 @@ def cpdb2_to_tfrecord():
 
 
     print("Finished.")
-
-if __name__ == "__main__":
-    cpdb2_to_tfrecord()
-

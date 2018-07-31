@@ -184,8 +184,6 @@ def simple_aggregate(raw_dir: Path):
     np.random.shuffle(dirs)
 
     for d in dirs:
-        if count >= 200000:
-            break
         total += 1
         fastas = sorted(d.glob("*.fasta"))
         xmls = sorted(d.glob("*.xml"))
@@ -211,7 +209,7 @@ def simple_aggregate(raw_dir: Path):
             if count % 5000 == 0:
                 print("%d sequences added out of %d read" % (count, total))
 
-    SeqIO.write(seqrecs, "cullUR50_20pc_200K.fasta", "fasta")
+    SeqIO.write(seqrecs, "cullUR50_20pc_13M.fasta", "fasta")
 
 
 if __name__ == "__main__":

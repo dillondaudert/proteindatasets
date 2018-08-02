@@ -1,5 +1,6 @@
 # convert a pandas DataFrame of amino acid sequence, secondary structure
 # sequence pairs into TF records
+from multiprocessing import Process, Queue
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -18,77 +19,123 @@ def _int64_feature(value):
 def _floats_feature(value):
     return tf.train.Feature(float_list=tf.train.FloatList(value=value))
 
+def write_file(filename, data):
+    """
+    Write a dataframe of records to a file.
+    """
+    num_written = 0
+    num_skipped = 0
+    with tf.python_io.TFRecordWriter(filename) as writer:
+        for index in range(data.shape[0]):
+            sample = data.iloc[index]
+            if len(sample.seq) > 1050 or len(sample.seq) < 20:
+                num_skipped += 1
+                continue
+            # convert the strings to
+            try:
+                seq_id = bytes(sample.id, "utf-8")
+                seq_len = len(sample.seq)
+                seq = bytes(sample.seq, "utf-8")
+                seq_phyche = prot_to_vector(sample.seq).reshape(-1)
+
+                tf_example = tf.train.Example(features=tf.train.Features(feature={
+                    "uniref_id": _bytes_feature(seq_id),
+                    "seq_len": _int64_feature(seq_len),
+                    "seq": _bytes_feature(seq),
+                    "seq_phyche": _floats_feature(seq_phyche)}))
+
+                writer.write(tf_example.SerializeToString())
+                num_written += 1
+
+            except Exception as e:
+                print("Exception encountered while processing index %d" % index)
+                print(e)
+                print(sample.id)
+                num_skipped += 1
+
+    return num_written, num_skipped
+
+def worker(wid, worker_queue, done_queue):
+    """
+    A worker processes views of the dataframe of records and writes them to
+    files.
+    It also tracks the total number of records written and skipped.
+    """
+
+    files_written = 0
+    total_written = 0
+    total_skipped = 0
+    while True:
+        (filename, data) = worker_queue.get()
+        # check if done
+        if filename is None:
+            done_queue.put((total_written, total_skipped))
+            return
+
+        written, skipped = write_file(filename, data)
+        files_written += 1
+        total_written += written
+        total_skipped += skipped
+        if files_written % 5 == 0:
+            print("Worker %d, %d total files, last file: %s - \
+                   records written: %d, records skipped: %d\n" % (wid, files_written, filename, total_written, total_skipped))
+
+
+
 def cUR50_to_tfrecords():
     """
     Convert a pandas dataframe of protein sequences into a TFRecord
     format.
-    Create a training and validation set 90/10 split.
     """
 
-    data = pd.read_csv(HOME+"/data/cUR50/cullUR50_20pc_189K.csv")
+    num_workers = 5
+    worker_queue = Queue(maxsize=10)
+    done_queue = Queue()
 
-    num_seqs = data.shape[0]
-    perm = np.random.permutation(num_seqs)
-    train_inds = perm[0:int(num_seqs*.9)]
-    valid_inds = perm[int(num_seqs*.9):]
+    print("Spawning %d workers." % (num_workers))
+    workers = []
+    for i in range(num_workers):
+        p = Process(target=worker, args=(i, worker_queue, done_queue))
+        workers.append(p)
+        p.start()
 
-    train_file = HOME+"/data/cUR50/cUR50_train.tfrecords"
-    valid_file = HOME+"/data/cUR50/cUR50_valid.tfrecords"
 
-    print("Writing ", train_file)
-    train_writer = tf.python_io.TFRecordWriter(train_file)
-    num_train = 0
-    for index in train_inds:
-        # convert the strings to
-        try:
-            sample = data.iloc[index]
-            seq_id = bytes(sample.uniref_id, "utf-8")
-            seq_len = len(sample.seq)
-            seq = bytes(sample.seq, "utf-8")
-            seq_phyche = prot_to_vector(sample.seq).reshape(-1)
+    files = ["uniref50_%d.csv" % (i) for i in range(1, 8)]
+    outfile_count = 0
+    outfile_prefix = HOME+"/data/uniref50/tfrecords/"
+    for f in files:
+        print("Processing %s\n" % f)
+        data = pd.read_csv(HOME+"/data/uniref50/"+f)
+        num_seqs = data.shape[0]
+        num_outfiles = num_seqs // 1000 if num_seqs % 1000 == 0 else (num_seqs // 1000) + 1
 
-            tf_example = tf.train.Example(features=tf.train.Features(feature={
-                "uniref_id": _bytes_feature(seq_id),
-                "seq_len": _int64_feature(seq_len),
-                "seq": _bytes_feature(seq),
-                "seq_phyche": _floats_feature(seq_phyche)}))
+        for i in range(num_outfiles):
 
-            train_writer.write(tf_example.SerializeToString())
-            num_train += 1
+            outfile = outfile_prefix+"ur50_%05d.tfrecords" % (outfile_count)
+            start_index = i*1000
+            end_index = (i+1)*1000 if (i+1)*1000 < num_seqs else num_seqs
 
-        except Exception as e:
-            print("Exception encountered while processing index %d" % index)
-            print(e)
-            print(sample.uniref_id)
-    train_writer.close()
+            worker_queue.put((outfile, data.iloc[start_index:end_index]))
 
-    print("Writing ", valid_file)
-    valid_writer = tf.python_io.TFRecordWriter(valid_file)
-    num_valid = 0
-    for index in valid_inds:
-        # convert the strings to
-        try:
-            sample = data.iloc[index]
-            seq_id = bytes(sample.uniref_id, "utf-8")
-            seq_len = len(sample.seq)
-            seq = bytes(sample.seq, "utf-8")
-            seq_phyche = prot_to_vector(sample.seq).reshape(-1)
+            outfile_count += 1
+        print("Final index for %s: %d, written to %s" % (f, end_index, outfile))
 
-            tf_example = tf.train.Example(features=tf.train.Features(feature={
-                "uniref_id": _bytes_feature(seq_id),
-                "seq_len": _int64_feature(seq_len),
-                "seq": _bytes_feature(seq),
-                "seq_phyche": _floats_feature(seq_phyche)}))
+    # pass stop signal to workers
+    for _ in range(num_workers):
+        worker_queue.put((None, None))
 
-            valid_writer.write(tf_example.SerializeToString())
-            num_valid += 1
+    total_written = 0
+    total_skipped = 0
+    for _ in range(num_workers):
+        (records_written, records_skipped) = done_queue.get()
+        total_written += records_written
+        total_skipped += records_skipped
 
-        except Exception as e:
-            print("Exception encountered while processing index %d" % index)
-            print(e)
-            print(sample.uniref_id)
-    valid_writer.close()
-    print("Wrote %d train and %d validation records" % (num_train, num_valid))
+    print("%d records written, %d records skipped" % (total_written, total_skipped))
+
+    print("Joining workers")
+    for p in workers:
+        p.join()
 
 
 if __name__ == "__main__":

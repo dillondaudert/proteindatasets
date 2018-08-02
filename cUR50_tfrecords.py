@@ -2,6 +2,7 @@
 # sequence pairs into TF records
 from multiprocessing import Process, Queue
 from pathlib import Path
+from glob import glob
 import pandas as pd
 import numpy as np
 import tensorflow as tf
@@ -101,23 +102,38 @@ def cUR50_to_tfrecords():
 
 
     files = ["uniref50_%d.csv" % (i) for i in range(1, 8)]
+    # the global count of output files
     outfile_count = 0
     outfile_prefix = HOME+"/data/uniref50/tfrecords/"
+
+    # find the last output file that was written
+    last_file = Path(sorted(glob(outfile_prefix+"ur50_*.tfrecords"))[-1]).stem
+    start_count = int(last_file.split("_")[-1]) - num_workers
+    start_count = start_count if start_count > 0 else 0
+    print("Starting at outfile #%d\n" % (start_count))
+
+    filesize = 1000
+    # for each subset of uniref50, containing a few million proteins
     for f in files:
         print("Processing %s\n" % f)
         data = pd.read_csv(HOME+"/data/uniref50/"+f)
         num_seqs = data.shape[0]
-        num_outfiles = num_seqs // 1000 if num_seqs % 1000 == 0 else (num_seqs // 1000) + 1
+        # split into tfrecord files, each with filesize (1000) proteins
+        num_outfiles = num_seqs // filesize if num_seqs % filesize == 0 else (num_seqs // filesize) + 1
 
+        # pass views of the dataframe into the queue
         for i in range(num_outfiles):
+            # NOTE: if the file already exists, skip it
+            if outfile_count < start_count:
+                outfile_count += 1
+                continue
 
             outfile = outfile_prefix+"ur50_%05d.tfrecords" % (outfile_count)
-            start_index = i*1000
-            end_index = (i+1)*1000 if (i+1)*1000 < num_seqs else num_seqs
-
+            start_index = i*filesize
+            end_index = (i+1)*filesize if (i+1)*filesize < num_seqs else num_seqs
             worker_queue.put((outfile, data.iloc[start_index:end_index]))
-
             outfile_count += 1
+
         print("Final index for %s: %d, written to %s" % (f, end_index, outfile))
 
     # pass stop signal to workers

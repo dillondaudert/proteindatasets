@@ -78,8 +78,8 @@ def worker(wid, worker_queue, done_queue):
         total_written += written
         total_skipped += skipped
         if files_written % 5 == 0:
-            print("Worker %d, %d total files, last file: %s - \
-                   records written: %d, records skipped: %d\n" % (wid, files_written, filename, total_written, total_skipped))
+            print("Worker %d:: %d total files, last file: %s \
+                   \n\t- records written: %d, records skipped: %d\n" % (wid, files_written, filename, total_written, total_skipped))
 
 
 

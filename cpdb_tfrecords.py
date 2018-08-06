@@ -21,7 +21,7 @@ ss_list = ["L", "B", "E", "G", "I", "H", "S", "T", "NoSeq"]
 def cpdb_to_tfrecord(datadir: str):
     """
     Convert the numpy array format for cpdb files to TFRecord format
-    Save training and validation set with 256 samples
+    Save training and validation set with 512 samples
     Args:
         datadir: the directory where the data is located. Saves the tfrecords here.
     """

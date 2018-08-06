@@ -3,6 +3,7 @@
 from multiprocessing import Process, Queue
 from pathlib import Path
 from glob import glob
+import mmap
 import pandas as pd
 import numpy as np
 import tensorflow as tf
@@ -116,25 +117,26 @@ def cUR50_to_tfrecords():
     # for each subset of uniref50, containing a few million proteins
     for f in files:
         print("Processing %s\n" % f)
-        data = pd.read_csv(HOME+"/data/uniref50/"+f)
-        num_seqs = data.shape[0]
-        # split into tfrecord files, each with filesize (1000) proteins
-        num_outfiles = num_seqs // filesize if num_seqs % filesize == 0 else (num_seqs // filesize) + 1
+        with open(HOME+"/data/uniref50/"+f, "r") as f_:
+            mm = mmap.mmap(f_.fileno(), 0, access=mmap.ACCESS_READ)
+            data = pd.read_csv(mm)
+            num_seqs = data.shape[0]
+            # split into tfrecord files, each with filesize (1000) proteins
+            num_outfiles = num_seqs // filesize if num_seqs % filesize == 0 else (num_seqs // filesize) + 1
 
-        # pass views of the dataframe into the queue
-        for i in range(num_outfiles):
-            # NOTE: if the file already exists, skip it
-            if outfile_count < start_count:
+            print("\tNum Files: %d\n" % num_outfiles)
+            # pass views of the dataframe into the queue
+            for i in range(num_outfiles):
+                # NOTE: if the file already exists, skip it
+                if outfile_count < start_count:
+                    outfile_count += 1
+                    continue
+
+                outfile = outfile_prefix+"ur50_%05d.tfrecords" % (outfile_count)
+                start_index = i*filesize
+                end_index = (i+1)*filesize if (i+1)*filesize < num_seqs else num_seqs
+                worker_queue.put((outfile, data.iloc[start_index:end_index]))
                 outfile_count += 1
-                continue
-
-            outfile = outfile_prefix+"ur50_%05d.tfrecords" % (outfile_count)
-            start_index = i*filesize
-            end_index = (i+1)*filesize if (i+1)*filesize < num_seqs else num_seqs
-            worker_queue.put((outfile, data.iloc[start_index:end_index]))
-            outfile_count += 1
-
-        print("Final index for %s: %d, written to %s" % (f, end_index, outfile))
 
     # pass stop signal to workers
     for _ in range(num_workers):

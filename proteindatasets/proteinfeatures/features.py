@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-aa_feats = pd.read_csv("./aa_feats_final.csv", index_col=0)
+aa_feats = pd.read_csv("./aa_feats.csv", index_col=0)
 
 
 def prot_to_vector(seq: str) -> np.ndarray:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os, sys
 import argparse as ap
-from cpdb_tfrecords import cpdb_to_tfrecord, cpdb_513_to_tfrecord
+from .cpdb_tfrecords import cpdb_to_tfrecord, cpdb_513_to_tfrecord
 
 parser = ap.ArgumentParser(description="Convert the CPDB dataset from numpy arrays to TF records.")
 parser.add_argument("-d", "--datadir", type=str, required=True,

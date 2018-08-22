@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os, sys
 import numpy as np, tensorflow as tf
-from features import prot_to_vector
+from proteinfeatures.features import prot_to_vector
 
 def _int64_feature(value):
     return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))

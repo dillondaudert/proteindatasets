@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
+import os
 
-aa_feats = pd.read_csv("./aa_feats.csv", index_col=0)
+dirpath = os.path.dirname(os.path.realpath(__file__))
+aa_feats = pd.read_csv(dirpath+"/aa_feats.csv", index_col=0)
 
 
 def prot_to_vector(seq: str) -> np.ndarray:
